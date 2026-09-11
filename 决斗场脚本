@@ -1,0 +1,169 @@
+终极决斗场自动化脚本 (带反检测内核)
+版本:1.0
+-- 功能: 自动格挡 + 自动连招 + 行为随机化
+-- 🛡️** 反检测层 1: 环境初始化与特征隐藏 
+-- 防止被 nil 检查或环境扫描发现
+if not game or not game.Players then 
+    print("[-] 等待游戏服务加载...") 
+    game:GetService("Players").PlayerAdded:Wait()
+end
+
+-- **🛡️ 反检测层 2: 局部化核心函数**
+-- 防止被 Hook (钩子) 拦截全局函数
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local RootPart = Character:WaitForChild("HumanoidRootPart")
+
+-- **🛡️ 反检测层 3: 动态随机种子**
+-- 增加行为不可预测性
+math.randomseed(tick() + os.clock() + math.huge)
+
+-- ==========================================
+-- ⚙️ 核心配置模块
+-- ==========================================
+local Config = {
+    AutoBlock = true,
+    AutoAttack = true,
+    AutoHeal = false, -- 示例扩展
+    MinReactTime = 0.08,   -- 最小反应时间 (秒)
+    MaxReactTime = 0.30,   -- 最大反应时间 (秒)
+    ActionJitter = 0.03,   -- 操作抖动 (防止机械式操作)
+    BlockCooldown = 0.8,   -- 格挡后冷却
+    DodgeChance = 0.1,     -- 10% 概率假装没反应过来 (防完美格挡)
+}
+
+-- ==========================================
+-- 🎲 辅助函数 (反检测逻辑)
+-- ==========================================
+
+-- 生成带随机抖动的延迟时间
+local function GetRandomDelay(min, max)
+    local base = min + math.random() * (max - min)
+    local jitter = math.random() * Config.ActionJitter
+    return base + jitter
+end
+
+-- 现实操作间隔
+local function HumanWait(min, max)
+    local delay = GetRandomDelay(min or 0.1, max or 0.5)
+    task.wait(delay)
+end
+
+-- 检查角色状态
+local function IsAlive()
+    return Humanoid and Humanoid.Health > 0
+end
+
+-- ==========================================
+-- ⚔️ 战斗逻辑系统
+-- ==========================================
+
+-- **自动格挡逻辑**
+local function HandleDefense()
+    if not Config.AutoBlock or not IsAlive() then return end
+    
+    -- 现实反应时间 (随机延迟)
+    local reactTime = GetRandomDelay(Config.MinReactTime, Config.MaxReactTime)
+    
+    -- 💀 反检测技巧: 偶尔故意不格挡 (假装手残)
+    if math.random() < Config.DodgeChance then
+        print("[AI] 假装没反应过来，不格挡此次攻击...")
+        return
+    end
+    
+    task.wait(reactTime)
+    
+    -- TODO: 这里需要根据具体游戏的 RemoteEvent 或 Input 模拟
+    -- 通用示例: 触发格挡远程事件
+    local success, err = pcall(function()
+        -- 示例: 按下 "Q" 键格挡 (需根据游戏修改)
+        -- game:GetService("ReplicatedStorage").Remotes.Block:FireServer()
+        print("[防御] 🛡️ 检测到威胁！执行格挡 (延迟: " .. string.format("%.2f", reactTime) .. "s)")
+        
+        -- 格挡动作冷却
+        task.wait(Config.BlockCooldown)
+    end)
+    
+    if not success then warn("[防御错误]" .. err) end
+end
+
+-- **自动攻击逻辑**
+local function HandleOffense()
+    if not Config.AutoAttack or not IsAlive() then return end
+    
+    local target = GetNearestEnemy() -- 需要实现此函数
+    if target then
+        local distance = (RootPart.Position - target.Position).Magnitude
+        
+        -- 攻击间隔
+        HumanWait(0.2, 0.8)
+        
+        pcall(function()
+            -- TODO: 根据游戏逻辑发送攻击指令
+            -- 轻攻击 -> 重攻击 连招
+            print("[进攻] ⚔️ 发现目标！距离: " .. string.format("%.1f", distance) .. " 单位")
+            
+            -- 连续连招
+            task.wait(GetRandomDelay(0.1, 0.3))
+            print("[连招] 🎯 轻攻击命中")
+            
+            task.wait(GetRandomDelay(0.2, 0.5))
+            print("[连招] 💥 重攻击终结")
+        end)
+    end
+end
+
+-- **寻找最近敌人 (占位符)**
+-- 实际使用中需要根据游戏的具体 Enemy/Player 遍历逻辑修改
+local function GetNearestEnemy()
+    local closest, dist = nil, 50 
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local char = player.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local root = char.HumanoidRootPart
+                local mag = (RootPart.Position - root.Position).Magnitude
+                if mag < dist then
+                    closest = root
+                    dist = mag
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- ==========================================
+-- 🚀 主循环 (带反检测调度)
+-- ==========================================
+
+print("==================================")
+print("⚔️ 决斗场 叶脚本已注入 (反检测系统启动)")
+print("==================================")
+
+-- 使用 pcall 包裹主循环，防止崩溃导致脚本停止
+local function StartMainLoop()
+    -- 使用 RenderStepped 替代死循环，更隐蔽且不卡顿
+    local heartbeat
+    heartbeat = RunService.Heartbeat:Connect(function()
+        pcall(HandleDefense)  -- 优先处理防御
+        pcall(HandleOffense)  -- 次要处理进攻
+        
+        -- 💤 反检测: 偶尔暂停检测 (人眼观察)
+        if math.random() < 0.02 then
+            local sleepTime = GetRandomDelay(0.5, 2.0)
+            task.wait(sleepTime)
+        end
+    end)
+    
+    -- 监听断开事件
+    heartbeat.Disconnected:Connect(function()
+        print("[系统] 游戏会话结束，脚本卸载.")
+    end)
+end
+
+-- 启动主程序
+pcall（StartMainLoop）
